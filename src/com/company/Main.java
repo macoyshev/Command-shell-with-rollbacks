@@ -31,7 +31,6 @@ class ArrayCircularBoundedQueue<T> implements ICircularBoundedQueue<T> {
     arr[rear] = value;
 
     rear = (rear + 1) % capacity;
-    if (rear == front) front = (front + 1) % capacity;
   }
 
   @Override
@@ -39,8 +38,6 @@ class ArrayCircularBoundedQueue<T> implements ICircularBoundedQueue<T> {
     T firstInQueue = arr[front];
 
     arr[front] = null;
-
-    if (front == rear) rear = (rear + 1) % capacity;
 
     front = (front + 1) % capacity;
 
