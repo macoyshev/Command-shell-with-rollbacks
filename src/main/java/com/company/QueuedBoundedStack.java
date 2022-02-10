@@ -1,6 +1,6 @@
 package com.company;
 
-class QueuedBoundedStack<T> implements IBoundedQueue<T> {
+public class QueuedBoundedStack<T> implements IBoundedQueue<T> {
     private final DoublyLinkedCircularBoundedQueue<T> basicQueue;
     private final DoublyLinkedCircularBoundedQueue<T> helperQueue;
 
@@ -15,13 +15,19 @@ class QueuedBoundedStack<T> implements IBoundedQueue<T> {
             basicQueue.offer(value);
 
         } else {
-            for (int i = 0; i < basicQueue.size(); i++) {
+            int basisSize= basicQueue.size();
+
+            for (int i = 0; i < basisSize; i++) {
                 helperQueue.offer(basicQueue.poll());
             }
 
             basicQueue.offer(value);
 
-            for (int i = 0; i < helperQueue.size(); i++) {
+            for (int i = 0; i < basisSize; i++) {
+                if (basicQueue.isFull()) {
+                    helperQueue.flush();
+                    break;
+                }
                 basicQueue.offer(helperQueue.poll());
             }
         }
