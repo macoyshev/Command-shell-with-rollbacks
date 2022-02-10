@@ -1,83 +1,68 @@
 package com.company;
 
-import java.lang.reflect.Array;
-import java.time.Year;
-import java.util.Objects;
-import java.util.concurrent.TransferQueue;
-
 public class Main {
   public static void main(String[] args) {
-    ArrayCircularBoundedQueue<String> e = new ArrayCircularBoundedQueue<>(3);
 
   }
 }
 
 
-class ArrayCircularBoundedQueue<T> implements ICircularBoundedQueue<T> {
+class DoublyLinkedCircularBoundedQueue<T> implements ICircularBoundedQueue<T> {
+  private final MyDoublyLinkedList<T> deque;
 
-  private int capacity;
-  private int size;
-
-  private int front = 0;
-  private int rear = 0;
-
-  public ArrayCircularBoundedQueue (int capacity) {
-    this.capacity = capacity;
+  public DoublyLinkedCircularBoundedQueue(int capacity) {
+    this.deque = new MyDoublyLinkedList<>(capacity);
   }
 
   @Override
   public void offer(T value) {
-
-    if (rear == front - 1) front = (front + 1) % capacity;
-
-    rear = (rear + 1) % capacity;
+    deque.addLast(value);
   }
 
   @Override
   public T poll() {
+    T front = deque.get(0);
+    deque.removeFirst();
 
-
-    if (front == rear) rear = (rear + 1) % capacity;
-
-    front = (front + 1) % capacity;
-
-    return null;
+    return front;
   }
 
   @Override
   public T peek() {
-    return null;
+    return deque.get(0);
   }
 
   @Override
   public void flush() {
-    while (front != rear) {
-
-      front += 1;
-    }
+    while (!deque.isEmpty())
+      deque.removeLast();
   }
 
   @Override
   public boolean isEmpty() {
-    return front == rear;
+    return deque.isEmpty();
   }
 
   @Override
   public boolean isFull() {
-    return rear + 1 == front;
+    return deque.size() == deque.capacity();
   }
 
   @Override
   public int size() {
-    return capacity - 1 - Math.abs(front - rear);
+    return deque.size();
   }
 
   @Override
   public int capacity() {
-    return capacity;
+    return deque.capacity();
+  }
+
+  @Override
+  public String toString() {
+    return deque.toString();
   }
 }
-
 
 interface ICircularBoundedQueue<T> {
   void offer(T value);  // insert an element to the rear of the queue
@@ -90,6 +75,83 @@ interface ICircularBoundedQueue<T> {
   boolean isEmpty(); // is the queue empty?
   boolean isFull(); // is the queue full?
   int size(); // number of elements
+  int capacity(); // maximum capacity
+}
+
+
+class QueuedBoundedStack<T> implements IBoundedStack<T> {
+  private MyDoublyLinkedList<T> deque;
+
+  public QueuedBoundedStack(int capacity) {
+    this.deque = new MyDoublyLinkedList<>(capacity);
+  }
+
+  @Override
+  public void push(T value) {
+    deque.addLast(value);
+  }
+
+  @Override
+  public T pop() {
+    T rear = deque.getLast();
+    deque.removeLast();
+    return rear;
+  }
+
+  @Override
+  public T top() {
+    return deque.getLast();
+  }
+
+  @Override
+  public void flush() {
+    while (!deque.isEmpty()) deque.removeLast();
+  }
+
+  @Override
+  public boolean isEmpty() {
+    return deque.isEmpty();
+  }
+
+  @Override
+  public boolean isFull() {
+    return deque.capacity() == deque.size();
+  }
+
+  @Override
+  public int size() {
+    return deque.size();
+  }
+
+  @Override
+  public int capacity() {
+    return deque.capacity();
+  }
+
+  @Override
+  public String toString() {
+    return deque.toString();
+  }
+}
+
+interface IBoundedStack<T> {
+  void push(T value); // push an element onto the stack
+                      // remove the oldest element
+                      // when if stack is full
+
+  T pop(); // remove an element from the top of the stack
+
+  T top(); // look at the element at the top of the stack
+           // (without removing it)
+
+  void flush(); // remove all elements from the stack
+
+  boolean isEmpty(); // is the stack empty?
+
+  boolean isFull(); // is the stack full?
+
+  int size(); // number of elements
+
   int capacity(); // maximum capacity
 }
 
@@ -137,6 +199,16 @@ class MyDoublyLinkedList<T> implements DoublyLinkedList<T> {
   }
 
   @Override
+  public T getLast() {
+    return tail.value;
+  }
+
+  @Override
+  public T getFirst() {
+    return head.value;
+  }
+
+  @Override
   public void set(int index, T value) {
     Node<T> currentNode = head;
 
@@ -149,6 +221,7 @@ class MyDoublyLinkedList<T> implements DoublyLinkedList<T> {
 
   @Override
   public void add(int index, T value) {
+
     Node<T> previousNode;
     Node<T> currentNode = head;
     Node<T> newNode = new Node<>(value);
@@ -165,17 +238,20 @@ class MyDoublyLinkedList<T> implements DoublyLinkedList<T> {
 
       head = newNode;
 
-      return;
+    } else {
+      previousNode = currentNode.previous;
+
+      previousNode.next = newNode;
+      currentNode.previous = newNode;
+
+      newNode.next = currentNode;
+      newNode.previous = previousNode;
     }
 
-    previousNode = currentNode.previous;
-
-    previousNode.next = newNode;
-    currentNode.previous = newNode;
-
-    newNode.next = currentNode;
-    newNode.previous = previousNode;
-
+    if (size > capacity) {
+      tail.previous.next = null;
+      tail = tail.previous;
+    }
   }
 
   @Override
@@ -266,12 +342,17 @@ class MyDoublyLinkedList<T> implements DoublyLinkedList<T> {
 
   @Override
   public void removeLast() {
+
     Node<T> previous = tail.previous;
 
     size -= 1;
 
-    previous.next = null;
-    tail = previous;
+    if (tail == head) {
+      tail = head = null;
+    } else {
+      previous.next = null;
+      tail = previous;
+    }
   }
 
   @Override
@@ -295,6 +376,10 @@ class MyDoublyLinkedList<T> implements DoublyLinkedList<T> {
     return stringBuilder.toString();
   }
 
+  public int capacity() {
+    return capacity;
+  }
+
   private void init(T value) {
     Node<T> newNode = new Node<>(value);
 
@@ -312,6 +397,10 @@ interface DoublyLinkedList<T> {
 
   T get(int index);
 
+  T getLast();
+
+  T getFirst();
+
   void set(int index, T value);
 
   void add(int index, T value);
@@ -325,4 +414,17 @@ interface DoublyLinkedList<T> {
   void removeFirst();
 
   void removeLast();
+}
+
+
+interface ISet<T> {
+  void add(T item);// add item in the set
+
+  void remove(T item);// remove an item from a set
+
+  boolean contains(T item);// check if a item belongs to a set
+
+  int size();// number of elements in a set
+
+  boolean isEmpty();// check if the set is empty
 }

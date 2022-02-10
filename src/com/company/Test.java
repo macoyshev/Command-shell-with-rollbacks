@@ -3,24 +3,17 @@ package com.company;
 
 public class Test {
     public static void main(String[] args) {
-        DoublyLinkedList<Integer> arr = new MyDoublyLinkedList<>(3);
-        arr.addLast(1);
-        arr.addLast(2);
-        arr.addLast(3);
-        arr.addLast(4);
-        arr.addLast(5);
+        QueuedBoundedStack<Integer> arr = new QueuedBoundedStack<>(3);
+
+        arr.push(1);
+        arr.push(2);
+        arr.push(3);
+        arr.push(4);
 
         System.out.println(arr);
+        System.out.println(arr.top());
 
-        arr.addFirst(6);
-
-        System.out.println(arr);
-
-        arr.removeLast();
-
-        System.out.println(arr);
-
-        arr.removeFirst();
+        arr.flush();
 
         System.out.println(arr);
     }
