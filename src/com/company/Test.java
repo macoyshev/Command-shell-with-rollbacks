@@ -3,15 +3,25 @@ package com.company;
 
 public class Test {
     public static void main(String[] args) {
-        ArrayCircularBoundedQueue<String> arr = new ArrayCircularBoundedQueue<>(5);
+        DoublyLinkedList<Integer> arr = new MyDoublyLinkedList<>(3);
+        arr.addLast(1);
+        arr.addLast(2);
+        arr.addLast(3);
+        arr.addLast(4);
+        arr.addLast(5);
 
-        arr.offer("1");
-        arr.offer("2");
-        arr.offer("3");
+        System.out.println(arr);
 
-        String a = arr.poll();
-        String b = arr.peek();
+        arr.addFirst(6);
 
-        int c = arr.capacity();
+        System.out.println(arr);
+
+        arr.removeLast();
+
+        System.out.println(arr);
+
+        arr.removeFirst();
+
+        System.out.println(arr);
     }
 }
