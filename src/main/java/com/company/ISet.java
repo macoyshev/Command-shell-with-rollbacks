@@ -1,6 +1,6 @@
 package com.company;
 
-interface ISet<T> {
+public interface ISet<T> {
     void add(T item);// add item in the set
 
     void remove(T item);// remove an item from a set
