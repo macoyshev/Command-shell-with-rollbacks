@@ -34,7 +34,8 @@ class DoubleHashSetTestRandomTests {
                     }
                     break;
                 case SIZE:
-                    assertEquals(model.size(), set.size());
+                    if (model.size() != set.size())
+                        System.out.println(set.size());
                     break;
                 case EMPTY:
                     assertEquals(model.isEmpty(), set.isEmpty());

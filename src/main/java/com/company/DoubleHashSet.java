@@ -1,11 +1,8 @@
 package com.company;
 
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
-import java.util.Objects;
-
 public class DoubleHashSet<T> implements ISet<T> {
     private T[] hashTable;
+
     private final int capacity;
     private final int PRIME;
     private int size = 0;
@@ -18,22 +15,26 @@ public class DoubleHashSet<T> implements ISet<T> {
 
     @Override
     public void add(T item) {
+        if (size == capacity) throw new IllegalStateException();
+
         int index = getIndex(item);
 
-        if (index != -1 && hashTable[index] == null)
+        if (index != -1 && hashTable[index] == null) {
             hashTable[index] = item;
-
-        size += 1;
+            size += 1;
+        }
     }
 
     @Override
     public void remove(T item) {
+        if (size == 0) return;
+
         int index = getIndex(item);
 
-        if (index != -1)
+        if (index != -1 && hashTable[index] != null) {
             hashTable[index] = null;
-
-        size -=1;
+            size -=1;
+        }
     }
 
     @Override
