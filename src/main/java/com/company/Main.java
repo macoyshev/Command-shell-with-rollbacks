@@ -1,14 +1,91 @@
-package com.company;
 
+import java.io.File;
 import java.util.Arrays;
-import java.util.Random;
 import java.util.Scanner;
 
 public class Main {
     public static void main(String[] args) {
+        CommandShellWithoutRollbacks.run();
     }
 }
 
+class CommandShellWithoutRollbacks {
+    private static DoublyLinkedCircularBoundedQueue<String> commands;
+
+    public static void run() {
+        readData();
+        executeAllCommands();
+    }
+
+    private static void readData() {
+        Scanner scanner = new Scanner(System.in);
+
+        int countOfCommands = scanner.nextInt();
+        scanner.nextLine();
+        commands = new DoublyLinkedCircularBoundedQueue<>(countOfCommands);
+
+        for(int i = 0; i < countOfCommands; i++) {
+            commands.offer(scanner.nextLine());
+        }
+    }
+
+    private static void executeAllCommands() {
+        for(int i = 0; i < commands.capacity(); i++) {
+
+            String[] command = commands.poll().split(" ");
+
+            String operation = null;
+            String arg = null;
+
+            try {
+                if (command.length > 2) {
+                    String errMes = Arrays.toString(command)
+                            .replaceAll(",","")
+                            .replace("[","")
+                            .replace("]","");
+
+                    throw new RuntimeException(errMes);
+                }
+
+                operation = command[0];
+
+                if (command.length == 2)
+                    arg = command[1];
+
+                switch (operation) {
+                    case "NEW":
+                        if (arg == null) throw new RuntimeException("NEW");
+
+                        if (FileSystem.isDirName(arg)) FileSystem.createDir(arg);
+                        else FileSystem.createFile(arg);
+
+                        break;
+                    case "REMOVE":
+                        if (arg == null) throw new RuntimeException("REMOVE");
+
+                        if (FileSystem.isDirName(arg)) FileSystem.removeDir(arg);
+                        else FileSystem.removeFile(arg);
+
+                        break;
+                    case "LIST":
+                        if (arg != null) throw new RuntimeException("LIST " + arg);
+
+                        FileSystem.displayAllFilesAndDirs();
+
+                        break;
+                    default:
+                        if (arg != null)
+                            throw new RuntimeException(operation + " " + arg);
+                        else
+                            throw new RuntimeException(operation);
+                }
+            } catch (RuntimeException e) {
+                System.out.println("ERROR: cannot execute " + e.getMessage());
+            }
+        }
+
+    }
+}
 
 class BoundedCommandsQueue {
     public static void main(String[] args) {
@@ -52,8 +129,8 @@ class BoundedCommandsQueue {
 }
 
 class FileSystem {
-    private static final int MAX_FILES_AND_DIRS_COUNT = 10000;
-    private static int MAX_BACKUP_DEPTH = 100;
+    private static final int MAX_FILES_AND_DIRS_COUNT = 1000;
+    private static final int MAX_BACKUP_DEPTH = 100;
 
     private static DoubleHashSet<String> files = new DoubleHashSet<>(MAX_FILES_AND_DIRS_COUNT);
     private static DoubleHashSet<String> dirs = new DoubleHashSet<>(MAX_FILES_AND_DIRS_COUNT);
@@ -65,10 +142,12 @@ class FileSystem {
     }
 
     public static void createDir(String newDirName) throws DirCreationException {
-        newDirName = newDirName.replace("/", "");
+        StringBuilder stringBuilder = new StringBuilder(newDirName);
+        stringBuilder.deleteCharAt(stringBuilder.length() - 1);
+        newDirName = stringBuilder.toString();
 
         if (dirs.contains(newDirName) || files.contains(newDirName))
-            throw new DirCreationException();
+            throw new DirCreationException("NEW " + newDirName + "/");
 
         storeStage();
 
@@ -77,7 +156,7 @@ class FileSystem {
 
     public static void createFile(String newFileName) throws FileCreationException {
         if (files.contains(newFileName) || dirs.contains(newFileName))
-            throw new FileCreationException();
+            throw new FileCreationException("NEW " + newFileName);
 
         storeStage();
 
@@ -86,7 +165,7 @@ class FileSystem {
 
     public static void removeDir(String dirName) throws DirRemovingException {
         if (!dirs.contains(dirName))
-            throw new DirRemovingException();
+            throw new DirRemovingException("REMOVE " + dirName);
 
         storeStage();
 
@@ -96,7 +175,7 @@ class FileSystem {
 
     public static void removeFile(String fileName) throws FileRemovingException {
         if (!files.contains(fileName))
-            throw new FileRemovingException();
+            throw new FileRemovingException("REMOVE " + fileName);
 
         storeStage();
 
@@ -106,26 +185,29 @@ class FileSystem {
     public static void makeBackUp() {
         BackUp previousStage = backUps.pop();
 
-        if (previousStage == null) throw new BackUpException();
+        if (previousStage == null) throw new BackUpException("UNDO");
 
         files = previousStage.getFiles();
         dirs = previousStage.getDirs();
     }
 
     public static void displayAllFilesAndDirs() {
-        displayDirs();
-        displayFiles();
-        System.out.print("\n");
-    }
+        StringBuilder res = new StringBuilder();
+        DoublyLinkedCircularBoundedQueue<String> filesQueue = files.getValues();
+        DoublyLinkedCircularBoundedQueue<String> dirsQueue = dirs.getValues();
 
-    public static void displayDirs() {
-        String dirsStr = dirs.toString();
+        while (!filesQueue.isEmpty()) {
+            res.append(filesQueue.poll());
+            res.append(" ");
+        }
 
-        System.out.print(dirsStr.replaceAll(" ", "/ "));
-    }
+        while (!dirsQueue.isEmpty()){
+            res.append(dirsQueue.poll());
+            res.append("/ ");
+        }
 
-    public static void displayFiles() {
-        System.out.print(files);
+        if (res.length() != 0)
+            System.out.println(res);
     }
 
     public static int getCurrentDepth() {
@@ -161,19 +243,34 @@ class FileSystem {
         }
     }
 
-    static class BackUpException extends RuntimeException {}
+    static class BackUpException extends RuntimeException {
+        public BackUpException(String message) {
+            super(message);
+        }
+    }
 
     static class DirCreationException extends RuntimeException {
-
+        public DirCreationException(String message) {
+            super(message);
+        }
     }
 
     static class FileCreationException extends RuntimeException {
+        public FileCreationException(String message) {
+            super(message);
+        }
     }
 
     static class DirRemovingException extends RuntimeException {
+        public DirRemovingException(String message) {
+            super(message);
+        }
     }
 
     static class FileRemovingException extends RuntimeException {
+        public FileRemovingException(String message) {
+            super(message);
+        }
     }
 }
 
@@ -257,6 +354,17 @@ class DoubleHashSet<T> implements ISet<T> {
         copySet.size = size;
 
         return copySet;
+    }
+
+    public DoublyLinkedCircularBoundedQueue<T> getValues() {
+        DoublyLinkedCircularBoundedQueue<T> res = new DoublyLinkedCircularBoundedQueue<>(size);
+
+        for(int i = 0; i < capacity; i++) {
+            if (hashTable[i] != null)
+                res.offer(hashTable[i]);
+        }
+
+        return res;
     }
 
     private int getIndex(T item) {
