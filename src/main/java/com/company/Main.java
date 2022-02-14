@@ -1,88 +1,20 @@
 package com.company;
 
+import java.util.Arrays;
+import java.util.Random;
 import java.util.Scanner;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 public class Main {
     public static void main(String[] args) {
-        CommandShellWithRollbacks.run();
-    }
-}
-
-class CommandShellWithRollbacks {
-    protected static ICircularBoundedQueue<Command> commands;
-
-    public static void run() {
-        readAllCommandsFromConsole();
-        executeAllCommands();
-    }
-
-    public static void readAllCommandsFromConsole() {
-        Scanner scanner = new Scanner(System.in);
-
-        int commandsNumber = scanner.nextInt();
-        int setCapacity = scanner.nextInt();
-
-        scanner.nextLine();
-
-        FileSystem.setMaxFilesAndDirsCount(setCapacity);
-
-        commands = new DoublyLinkedCircularBoundedQueue<>(commandsNumber);
-
-        for(int i = 0; i < commandsNumber; i++) {
-            parseAndAddCommand(scanner.nextLine().split(" "));
-        }
-
-        scanner.close();
-    }
-
-    public static void executeAllCommands() {
-        for(int i = 0; i < commands.capacity(); i++) {
-            commands.poll().execute();
-        }
-    }
-
-    protected static void parseAndAddCommand(String[] data) {
-        switch (data[0]) {
-            case "NEW" -> commands.offer(new NewCommand(data[1]));
-            case "REMOVE" -> commands.offer(new RemoveCommand(data[1]));
-            case "LIST" -> commands.offer(new ListCommand());
-        }
-
-        if (data[0].equals("UNDO"))
-            if (data.length == 2) commands.offer(new UndoCommand(data[1]));
-            else commands.offer(new UndoCommand());
-    }
-
-    static class ListCommand implements Command {
-        @Override
-        public void execute() {
-            FileSystem.displayAllFilesAndDirs();
-        }
-    }
-
-    static class UndoCommand implements Command{
-        private int count = 1;
-
-        public UndoCommand() {
-        }
-
-        public UndoCommand(String count) {
-            this.count = Integer.parseInt(count);
-        }
-
-        @Override
-        public void execute() {
-            for(int i = 0; i < count; i++) {
-                FileSystem.makeBackUp();
-            }
-        }
     }
 }
 
 
 class BoundedCommandsQueue {
+    public static void main(String[] args) {
+        run();
+    }
+
     private final ICircularBoundedQueue<String> commands;
     private final int capacity;
 
@@ -119,147 +51,56 @@ class BoundedCommandsQueue {
     }
 }
 
-abstract class CommandShellWithoutRollbacks {
-    protected static ICircularBoundedQueue<Command> commands;
-
-    public static void run() {
-        readAllCommandsFromConsole();
-        executeAllCommands();
-    }
-
-    public static void readAllCommandsFromConsole() {
-        Scanner scanner = new Scanner(System.in);
-
-        int commandsNumber = Integer.parseInt(scanner.nextLine());
-
-        commands = new DoublyLinkedCircularBoundedQueue<>(commandsNumber);
-
-        for(int i = 0; i < commandsNumber; i++) {
-            parseAndAddCommand(scanner.nextLine().split(" "));
-        }
-
-        scanner.close();
-    }
-
-    public static void executeAllCommands() {
-        for(int i = 0; i < commands.capacity(); i++) {
-            commands.poll().execute();
-        }
-    }
-
-    protected static void parseAndAddCommand(String[] data) {
-        switch (data[0]) {
-            case "NEW" -> commands.offer(new NewCommand(data[1]));
-            case "REMOVE" -> commands.offer(new RemoveCommand(data[1]));
-            case "LIST" -> commands.offer(new ListCommand());
-        }
-    }
-
-    static class ListCommand implements Command {
-        @Override
-        public void execute() {
-            FileSystem.displayAllFilesAndDirs();
-        }
-    }
-}
-
-class NewCommand implements Command {
-    String arg;
-
-    public NewCommand(String arg) {
-        this.arg = arg;
-    }
-
-    @Override
-    public void execute() {
-        if (FileSystem.isDirName(arg)) FileSystem.createDir(arg);
-        else FileSystem.createFile(arg);
-    }
-}
-
-class RemoveCommand implements Command {
-    String arg;
-
-    public RemoveCommand(String arg) {
-        this.arg = arg;
-    }
-
-    @Override
-    public void execute() {
-        if (FileSystem.isDirName(arg)) FileSystem.removeDir(arg);
-        else FileSystem.removeFile(arg);
-    }
-}
-
-interface Command {
-    void execute();
-}
-
 class FileSystem {
-    private static int MAX_FILES_AND_DIRS_COUNT = 1000000;
-    private static int MAX_BACKUPS_COUNT = 100;
+    private static final int MAX_FILES_AND_DIRS_COUNT = 10000;
+    private static int MAX_BACKUP_DEPTH = 100;
 
     private static DoubleHashSet<String> files = new DoubleHashSet<>(MAX_FILES_AND_DIRS_COUNT);
     private static DoubleHashSet<String> dirs = new DoubleHashSet<>(MAX_FILES_AND_DIRS_COUNT);
 
-    private static final QueuedBoundedStack<BackUp> backUps = new QueuedBoundedStack<>(MAX_BACKUPS_COUNT);
+    private static QueuedBoundedStack<BackUp> backUps = new QueuedBoundedStack<>(MAX_BACKUP_DEPTH);
+
+    public static boolean isDirName(String dir) {
+        return dir.charAt(dir.length() - 1) == '/';
+    }
 
     public static void createDir(String newDirName) throws DirCreationException {
+        newDirName = newDirName.replace("/", "");
+
         if (dirs.contains(newDirName) || files.contains(newDirName))
             throw new DirCreationException();
 
-        dirs.add(newDirName);
-
         storeStage();
-    }
 
-    public static boolean isDirName(String file) {
-        Pattern pattern = Pattern.compile(".+/");
-        Matcher dirMatcher = pattern.matcher(file);
-
-        return dirMatcher.find();
+        dirs.add(newDirName);
     }
 
     public static void createFile(String newFileName) throws FileCreationException {
         if (files.contains(newFileName) || dirs.contains(newFileName))
             throw new FileCreationException();
 
-        files.add(newFileName);
-
         storeStage();
+
+        files.add(newFileName);
     }
 
     public static void removeDir(String dirName) throws DirRemovingException {
         if (!dirs.contains(dirName))
             throw new DirRemovingException();
 
+        storeStage();
+
         dirs.remove(dirName);
 
-        storeStage();
     }
 
     public static void removeFile(String fileName) throws FileRemovingException {
         if (!files.contains(fileName))
             throw new FileRemovingException();
 
-        files.remove(fileName);
-
         storeStage();
-    }
 
-    public static void displayAllFilesAndDirs() {
-        displayDirs();
-        displayFiles();
-    }
-
-    public static void displayDirs() {
-        String dirsStr = dirs.toString();
-
-        System.out.print(dirsStr.replaceAll(" ", "/ "));
-    }
-
-    public static void displayFiles() {
-        System.out.println(files);
+        files.remove(fileName);
     }
 
     public static void makeBackUp() {
@@ -271,29 +112,44 @@ class FileSystem {
         dirs = previousStage.getDirs();
     }
 
-    public static void setMaxFilesAndDirsCount(int maxFilesAndDirsCount) {
-        MAX_FILES_AND_DIRS_COUNT = maxFilesAndDirsCount;
+    public static void displayAllFilesAndDirs() {
+        displayDirs();
+        displayFiles();
+        System.out.print("\n");
     }
 
-    public static void setMaxBackupsCount(int maxBackupsCount) {
-        MAX_BACKUPS_COUNT = maxBackupsCount;
+    public static void displayDirs() {
+        String dirsStr = dirs.toString();
+
+        System.out.print(dirsStr.replaceAll(" ", "/ "));
+    }
+
+    public static void displayFiles() {
+        System.out.print(files);
+    }
+
+    public static int getCurrentDepth() {
+        return backUps.size();
+    }
+
+    public static void setBackUpDepth(int size) {
+        backUps = new QueuedBoundedStack<>(size);
     }
 
     private static void storeStage() {
-        BackUp currentStage = new BackUp(files, dirs);
+        BackUp currentStage = new BackUp();
 
         backUps.push(currentStage);
     }
-
 
     static private class BackUp {
         private final DoubleHashSet<String> files;
 
         private final DoubleHashSet<String> dirs;
 
-        public BackUp(DoubleHashSet<String> files, DoubleHashSet<String> dirs) {
-            this.files = files;
-            this.dirs = dirs;
+        public BackUp() {
+            this.files = FileSystem.files.copy();
+            this.dirs = FileSystem.dirs.copy();
         }
 
         public DoubleHashSet<String> getFiles() {
@@ -319,13 +175,13 @@ class FileSystem {
 
     static class FileRemovingException extends RuntimeException {
     }
-    }
+}
 
 class DoubleHashSet<T> implements ISet<T> {
     private T[] hashTable;
 
-    private final int capacity;
-    private final int PRIME;
+    private int capacity;
+    private int PRIME;
     private int size = 0;
 
     public DoubleHashSet(int capacity) {
@@ -392,11 +248,18 @@ class DoubleHashSet<T> implements ISet<T> {
         return stringBuilder.toString();
     }
 
-    public T[] getValues() {
-        return hashTable;
+    public DoubleHashSet<T> copy() {
+        DoubleHashSet<T> copySet = new DoubleHashSet<>(this.capacity);
+
+        copySet.hashTable = Arrays.copyOf(this.hashTable, this.hashTable.length);
+        copySet.capacity = this.capacity;
+        copySet.PRIME = this.PRIME;
+        copySet.size = size;
+
+        return copySet;
     }
 
-    public int getIndex(T item) {
+    private int getIndex(T item) {
         int index;
 
         for (int i = 0; i < capacity; i++) {
