@@ -1,11 +1,94 @@
+package com.company;
 
-import java.io.File;
 import java.util.Arrays;
 import java.util.Scanner;
 
 public class Main {
     public static void main(String[] args) {
         CommandShellWithoutRollbacks.run();
+    }
+}
+
+class CommandShellWithRollbacks {
+    private static DoublyLinkedCircularBoundedQueue<String> commands;
+    public static void run() {
+        readData();
+        executeAllCommands();
+    }
+
+    private static void readData() {
+        Scanner scanner = new Scanner(System.in);
+
+        int countOfCommands = scanner.nextInt();
+        int backUpsDepth = scanner.nextInt();
+        scanner.nextLine();
+
+        FileSystem.setBackUpDepth(backUpsDepth);
+        commands = new DoublyLinkedCircularBoundedQueue<>(countOfCommands);
+
+        for(int i = 0; i < countOfCommands; i++) {
+            commands.offer(scanner.nextLine());
+        }
+    }
+
+    private static void executeAllCommands() {
+        for(int i = 0; i < commands.capacity(); i++) {
+
+            String[] command = commands.poll().split(" ");
+
+            String operation = null;
+            String arg = null;
+
+            try {
+                operation = command[0];
+
+                if (command.length == 2)
+                    arg = command[1];
+
+                switch (operation) {
+                    case "NEW":
+                        if (FileSystem.isDirName(arg)) FileSystem.createDir(arg);
+                        else FileSystem.createFile(arg);
+
+                        break;
+                    case "REMOVE":
+                        if (FileSystem.isDirName(arg)) FileSystem.removeDir(arg);
+                        else FileSystem.removeFile(arg);
+
+                        break;
+                    case "LIST":
+                        FileSystem.displayAllFilesAndDirs();
+
+                        break;
+
+                    case "UNDO":
+                        if (arg != null) {
+                            int count = Integer.parseInt(arg);
+
+                            if (count >= FileSystem.getCurrentDepth())
+                                throw new RuntimeException("UNDO " + count);
+
+                            for(int j = 0; j < count; j++) {
+                                FileSystem.makeBackUp();
+                            }
+                        } else {
+                            if (FileSystem.getCurrentDepth() == 1)
+                                throw new RuntimeException("UNDO");
+
+                            FileSystem.makeBackUp();
+                        }
+                        break;
+                    default:
+                        if (arg != null)
+                            throw new RuntimeException(operation + " " + arg);
+                        else
+                            throw new RuntimeException(operation);
+                }
+            } catch (RuntimeException e) {
+                System.out.println("ERROR: cannot execute " + e.getMessage());
+            }
+        }
+
     }
 }
 
@@ -129,11 +212,10 @@ class BoundedCommandsQueue {
 }
 
 class FileSystem {
-    private static final int MAX_FILES_AND_DIRS_COUNT = 1000;
+    private static final int MAX_FILES_AND_DIRS_COUNT = 10000;
     private static final int MAX_BACKUP_DEPTH = 100;
 
-    private static DoubleHashSet<String> files = new DoubleHashSet<>(MAX_FILES_AND_DIRS_COUNT);
-    private static DoubleHashSet<String> dirs = new DoubleHashSet<>(MAX_FILES_AND_DIRS_COUNT);
+    private static DoubleHashSet<String> storage = new DoubleHashSet<>(MAX_FILES_AND_DIRS_COUNT);
 
     private static QueuedBoundedStack<BackUp> backUps = new QueuedBoundedStack<>(MAX_BACKUP_DEPTH);
 
@@ -142,68 +224,56 @@ class FileSystem {
     }
 
     public static void createDir(String newDirName) throws DirCreationException {
-        StringBuilder stringBuilder = new StringBuilder(newDirName);
-        stringBuilder.deleteCharAt(stringBuilder.length() - 1);
-        newDirName = stringBuilder.toString();
-
-        if (dirs.contains(newDirName) || files.contains(newDirName))
-            throw new DirCreationException("NEW " + newDirName + "/");
+        if (storage.contains(newDirName))
+            throw new DirCreationException("NEW " + newDirName);
 
         storeStage();
 
-        dirs.add(newDirName);
+        storage.add(newDirName);
     }
 
     public static void createFile(String newFileName) throws FileCreationException {
-        if (files.contains(newFileName) || dirs.contains(newFileName))
+        if (storage.contains(newFileName))
             throw new FileCreationException("NEW " + newFileName);
 
         storeStage();
 
-        files.add(newFileName);
+        storage.add(newFileName);
     }
 
     public static void removeDir(String dirName) throws DirRemovingException {
-        if (!dirs.contains(dirName))
+        if (!storage.contains(dirName))
             throw new DirRemovingException("REMOVE " + dirName);
 
         storeStage();
 
-        dirs.remove(dirName);
+        storage.remove(dirName);
 
     }
 
     public static void removeFile(String fileName) throws FileRemovingException {
-        if (!files.contains(fileName))
+        if (!storage.contains(fileName))
             throw new FileRemovingException("REMOVE " + fileName);
 
         storeStage();
 
-        files.remove(fileName);
+        storage.remove(fileName);
     }
 
     public static void makeBackUp() {
         BackUp previousStage = backUps.pop();
 
-        if (previousStage == null) throw new BackUpException("UNDO");
-
-        files = previousStage.getFiles();
-        dirs = previousStage.getDirs();
+        storage = previousStage.getStorage();
     }
 
     public static void displayAllFilesAndDirs() {
         StringBuilder res = new StringBuilder();
-        DoublyLinkedCircularBoundedQueue<String> filesQueue = files.getValues();
-        DoublyLinkedCircularBoundedQueue<String> dirsQueue = dirs.getValues();
+        DoublyLinkedCircularBoundedQueue<String> storageValues = storage.getValues();
 
-        while (!filesQueue.isEmpty()) {
-            res.append(filesQueue.poll());
+
+        while (!storageValues.isEmpty()){
+            res.append(storageValues.poll());
             res.append(" ");
-        }
-
-        while (!dirsQueue.isEmpty()){
-            res.append(dirsQueue.poll());
-            res.append("/ ");
         }
 
         if (res.length() != 0)
@@ -225,21 +295,14 @@ class FileSystem {
     }
 
     static private class BackUp {
-        private final DoubleHashSet<String> files;
-
-        private final DoubleHashSet<String> dirs;
+        private final DoubleHashSet<String> storage;
 
         public BackUp() {
-            this.files = FileSystem.files.copy();
-            this.dirs = FileSystem.dirs.copy();
+            this.storage = FileSystem.storage.copy();
         }
 
-        public DoubleHashSet<String> getFiles() {
-            return files;
-        }
-
-        public DoubleHashSet<String> getDirs() {
-            return dirs;
+        public DoubleHashSet<String> getStorage() {
+            return storage;
         }
     }
 
@@ -278,13 +341,12 @@ class DoubleHashSet<T> implements ISet<T> {
     private T[] hashTable;
 
     private int capacity;
-    private int PRIME;
+    private int PRIME = 3 ;
     private int size = 0;
 
     public DoubleHashSet(int capacity) {
         this.capacity = capacity;
         this.hashTable = (T[]) new Object[capacity];
-        this.PRIME = getClosestPrime(capacity);
     }
 
     @Override
@@ -377,6 +439,7 @@ class DoubleHashSet<T> implements ISet<T> {
                 if (hashTable[index].equals(item))
                     return index;
             }
+
             if (hashTable[index] == null) return index;
         }
 
