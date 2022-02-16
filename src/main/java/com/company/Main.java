@@ -1,94 +1,67 @@
-package com.company;
+//package com.company;
 
 import java.util.Arrays;
 import java.util.Scanner;
 
 public class Main {
     public static void main(String[] args) {
-        CommandShellWithoutRollbacks.run();
+        CommandShellWithRollbacks.run();
     }
 }
 
 class CommandShellWithRollbacks {
     private static DoublyLinkedCircularBoundedQueue<String> commands;
-    public static void run() {
-        readData();
-        executeAllCommands();
-    }
 
-    private static void readData() {
+    public static void run() {
         Scanner scanner = new Scanner(System.in);
 
-        int countOfCommands = scanner.nextInt();
-        int backUpsDepth = scanner.nextInt();
+        int commandsCount = scanner.nextInt();
+        int backUpDepth = scanner.nextInt();
         scanner.nextLine();
 
-        FileSystem.setBackUpDepth(backUpsDepth);
-        commands = new DoublyLinkedCircularBoundedQueue<>(countOfCommands);
+        FileSystem.init(commandsCount, backUpDepth);
 
-        for(int i = 0; i < countOfCommands; i++) {
-            commands.offer(scanner.nextLine());
-        }
-    }
-
-    private static void executeAllCommands() {
-        for(int i = 0; i < commands.capacity(); i++) {
-
-            String[] command = commands.poll().split(" ");
-
-            String operation = null;
-            String arg = null;
+        for (int i = 0; i < commandsCount; i++) {
+            String[] data = scanner.nextLine().split(" ");
 
             try {
-                operation = command[0];
-
-                if (command.length == 2)
-                    arg = command[1];
-
-                switch (operation) {
+                switch (data[0]) {
                     case "NEW":
-                        if (FileSystem.isDirName(arg)) FileSystem.createDir(arg);
-                        else FileSystem.createFile(arg);
+                        FileSystem.create(data[1]);
 
                         break;
                     case "REMOVE":
-                        if (FileSystem.isDirName(arg)) FileSystem.removeDir(arg);
-                        else FileSystem.removeFile(arg);
+                        FileSystem.remove(data[1]);
 
                         break;
                     case "LIST":
                         FileSystem.displayAllFilesAndDirs();
 
                         break;
-
                     case "UNDO":
-                        if (arg != null) {
-                            int count = Integer.parseInt(arg);
+                        int countBackUps = 1;
+                        if (data.length == 2) {
+                            countBackUps = Integer.parseInt(data[1]);
 
-                            if (count >= FileSystem.getCurrentDepth())
-                                throw new RuntimeException("UNDO " + count);
-
-                            for(int j = 0; j < count; j++) {
-                                FileSystem.makeBackUp();
-                            }
+                            if (countBackUps >= FileSystem.getCurrentDepth())
+                                throw new RuntimeException("UNDO "+ countBackUps);
                         } else {
-                            if (FileSystem.getCurrentDepth() == 1)
+                            if (countBackUps >= FileSystem.getCurrentDepth())
                                 throw new RuntimeException("UNDO");
+                        }
 
+
+
+                        for(int j = 0; j < countBackUps; j++) {
                             FileSystem.makeBackUp();
                         }
+
                         break;
-                    default:
-                        if (arg != null)
-                            throw new RuntimeException(operation + " " + arg);
-                        else
-                            throw new RuntimeException(operation);
                 }
             } catch (RuntimeException e) {
                 System.out.println("ERROR: cannot execute " + e.getMessage());
             }
         }
-
     }
 }
 
@@ -96,77 +69,34 @@ class CommandShellWithoutRollbacks {
     private static DoublyLinkedCircularBoundedQueue<String> commands;
 
     public static void run() {
-        readData();
-        executeAllCommands();
-    }
-
-    private static void readData() {
         Scanner scanner = new Scanner(System.in);
 
-        int countOfCommands = scanner.nextInt();
-        scanner.nextLine();
-        commands = new DoublyLinkedCircularBoundedQueue<>(countOfCommands);
+        int commandsCount = Integer.parseInt(scanner.nextLine());
 
-        for(int i = 0; i < countOfCommands; i++) {
-            commands.offer(scanner.nextLine());
-        }
-    }
+        FileSystem.init(commandsCount);
 
-    private static void executeAllCommands() {
-        for(int i = 0; i < commands.capacity(); i++) {
-
-            String[] command = commands.poll().split(" ");
-
-            String operation = null;
-            String arg = null;
+        for(int i = 0; i < commandsCount; i++) {
+            String[] data = scanner.nextLine().split(" ");
 
             try {
-                if (command.length > 2) {
-                    String errMes = Arrays.toString(command)
-                            .replaceAll(",","")
-                            .replace("[","")
-                            .replace("]","");
-
-                    throw new RuntimeException(errMes);
-                }
-
-                operation = command[0];
-
-                if (command.length == 2)
-                    arg = command[1];
-
-                switch (operation) {
+                switch (data[0]) {
                     case "NEW":
-                        if (arg == null) throw new RuntimeException("NEW");
-
-                        if (FileSystem.isDirName(arg)) FileSystem.createDir(arg);
-                        else FileSystem.createFile(arg);
+                        FileSystem.create(data[1]);
 
                         break;
                     case "REMOVE":
-                        if (arg == null) throw new RuntimeException("REMOVE");
-
-                        if (FileSystem.isDirName(arg)) FileSystem.removeDir(arg);
-                        else FileSystem.removeFile(arg);
+                        FileSystem.remove(data[1]);
 
                         break;
                     case "LIST":
-                        if (arg != null) throw new RuntimeException("LIST " + arg);
-
                         FileSystem.displayAllFilesAndDirs();
 
                         break;
-                    default:
-                        if (arg != null)
-                            throw new RuntimeException(operation + " " + arg);
-                        else
-                            throw new RuntimeException(operation);
                 }
             } catch (RuntimeException e) {
                 System.out.println("ERROR: cannot execute " + e.getMessage());
             }
         }
-
     }
 }
 
@@ -212,86 +142,64 @@ class BoundedCommandsQueue {
 }
 
 class FileSystem {
-    private static final int MAX_FILES_AND_DIRS_COUNT = 10000;
-    private static final int MAX_BACKUP_DEPTH = 100;
+    private static DoubleHashSet<String> storage = new DoubleHashSet<>(1);
 
-    private static DoubleHashSet<String> storage = new DoubleHashSet<>(MAX_FILES_AND_DIRS_COUNT);
+    private static QueuedBoundedStack<BackUp> stages = new QueuedBoundedStack<>( 1);
 
-    private static QueuedBoundedStack<BackUp> backUps = new QueuedBoundedStack<>(MAX_BACKUP_DEPTH);
-
-    public static boolean isDirName(String dir) {
-        return dir.charAt(dir.length() - 1) == '/';
+    public static void init(int maxFilesDirsCount) {
+        storage = new DoubleHashSet<>(maxFilesDirsCount);
+        stages = new QueuedBoundedStack<>(100);
     }
 
-    public static void createDir(String newDirName) throws DirCreationException {
-        if (storage.contains(newDirName))
-            throw new DirCreationException("NEW " + newDirName);
-
-        storeStage();
-
-        storage.add(newDirName);
+    public static void init(int maxFilesDirsCount, int maxBackUpDepth) {
+        storage = new DoubleHashSet<>(maxFilesDirsCount);
+        stages = new QueuedBoundedStack<>(maxBackUpDepth);
     }
 
-    public static void createFile(String newFileName) throws FileCreationException {
-        if (storage.contains(newFileName))
-            throw new FileCreationException("NEW " + newFileName);
+    public static void create(String name) throws CreationException {
+        try {
+            storeStage();
 
-        storeStage();
+            storage.add(name);
 
-        storage.add(newFileName);
+        } catch (RuntimeException e) {
+            stages.pop();
+
+            throw new CreationException("NEW " + name);
+        }
     }
 
-    public static void removeDir(String dirName) throws DirRemovingException {
-        if (!storage.contains(dirName))
-            throw new DirRemovingException("REMOVE " + dirName);
+    public static void remove(String name) throws RemoveException {
+        try {
+            storeStage();
 
-        storeStage();
+            storage.remove(name);
 
-        storage.remove(dirName);
-
-    }
-
-    public static void removeFile(String fileName) throws FileRemovingException {
-        if (!storage.contains(fileName))
-            throw new FileRemovingException("REMOVE " + fileName);
-
-        storeStage();
-
-        storage.remove(fileName);
+        } catch (RuntimeException e) {
+            stages.pop();
+            throw new RemoveException("REMOVE " + name);
+        }
     }
 
     public static void makeBackUp() {
-        BackUp previousStage = backUps.pop();
+        BackUp previousStage = stages.pop();
 
         storage = previousStage.getStorage();
     }
 
     public static void displayAllFilesAndDirs() {
-        StringBuilder res = new StringBuilder();
-        DoublyLinkedCircularBoundedQueue<String> storageValues = storage.getValues();
-
-
-        while (!storageValues.isEmpty()){
-            res.append(storageValues.poll());
-            res.append(" ");
-        }
-
-        if (res.length() != 0)
-            System.out.println(res);
+        storage.print();
+        System.out.println();
     }
 
     public static int getCurrentDepth() {
-        return backUps.size();
-    }
-
-    public static void setBackUpDepth(int size) {
-        backUps = new QueuedBoundedStack<>(size);
+        return stages.size();
     }
 
     private static void storeStage() {
         BackUp currentStage = new BackUp();
 
-        backUps.push(currentStage);
+        stages.push(currentStage);
     }
 
     static private class BackUp {
@@ -306,78 +214,88 @@ class FileSystem {
         }
     }
 
-    static class BackUpException extends RuntimeException {
-        public BackUpException(String message) {
+    static class CreationException extends RuntimeException {
+        public CreationException(String message) {
             super(message);
         }
     }
 
-    static class DirCreationException extends RuntimeException {
-        public DirCreationException(String message) {
-            super(message);
-        }
-    }
-
-    static class FileCreationException extends RuntimeException {
-        public FileCreationException(String message) {
-            super(message);
-        }
-    }
-
-    static class DirRemovingException extends RuntimeException {
-        public DirRemovingException(String message) {
-            super(message);
-        }
-    }
-
-    static class FileRemovingException extends RuntimeException {
-        public FileRemovingException(String message) {
+    static class RemoveException extends RuntimeException {
+        public RemoveException(String message) {
             super(message);
         }
     }
 }
 
 class DoubleHashSet<T> implements ISet<T> {
-    private T[] hashTable;
+    private static final Object DEFUNCT = "DEFUNCT";
 
+    private final int PRIME;
+
+    private T[] hashTable;
     private int capacity;
-    private int PRIME = 3 ;
     private int size = 0;
 
     public DoubleHashSet(int capacity) {
         this.capacity = capacity;
         this.hashTable = (T[]) new Object[capacity];
+        this.PRIME = 3;
     }
 
     @Override
     public void add(T item) {
-        if (size == capacity) throw new IllegalStateException();
+        int index;
 
-        int index = getIndex(item);
+        for(int i = 0; i < capacity - 1; i++) {
+            index = (hash1(item) + i * hash2(item)) % capacity;
 
-        if (index != -1 && hashTable[index] == null) {
-            hashTable[index] = item;
-            size += 1;
+            if (hashTable[index] == null) {
+                hashTable[index] = item;
+                size++;
+
+                return;
+            } else {
+                if (hashTable[index].equals(item))
+                    break;
+            }
         }
+
+        throw new RuntimeException();
     }
 
     @Override
     public void remove(T item) {
-        if (size == 0) return;
+        int index;
 
-        int index = getIndex(item);
+        for(int i = 0; i < capacity - 1; i++) {
+            index = (hash1(item) + i * hash2(item)) % capacity;
 
-        if (index != -1 && hashTable[index] != null) {
-            hashTable[index] = null;
-            size -= 1;
+            if (hashTable[index] == null) break;
+
+            if (hashTable[index].equals(item)) {
+                hashTable[index] = (T) DEFUNCT;
+                size--;
+
+                return;
+            }
         }
+
+        throw new RuntimeException();
     }
 
     @Override
     public boolean contains(T item) {
-        int index = getIndex(item);
+        int index;
 
-        return index != -1 && hashTable[index] != null;
+        for(int i = 0; i < capacity - 1; i++) {
+            index = (hash1(item) + i * hash2(item)) % capacity;
+
+            if (hashTable[index] == null) return false;
+
+            if (hashTable[index].equals(item)) return true;
+        }
+
+        return false;
     }
 
     @Override
@@ -387,94 +305,67 @@ class DoubleHashSet<T> implements ISet<T> {
 
     @Override
     public boolean isEmpty() {
-        for (int i = 0; i < capacity; i++) {
-            if (hashTable[i] != null) return false;
-        }
-
-        return true;
+        return size == 0;
     }
 
-    @Override
-    public String toString() {
-        StringBuilder stringBuilder = new StringBuilder();
-        for (int i = 0; i < capacity; i++) {
-            if (hashTable[i] != null) {
-                stringBuilder.append(hashTable[i]);
-                stringBuilder.append(" ");
-            }
-        }
-
-        return stringBuilder.toString();
-    }
-
-    public DoubleHashSet<T> copy() {
-        DoubleHashSet<T> copySet = new DoubleHashSet<>(this.capacity);
-
-        copySet.hashTable = Arrays.copyOf(this.hashTable, this.hashTable.length);
-        copySet.capacity = this.capacity;
-        copySet.PRIME = this.PRIME;
-        copySet.size = size;
-
-        return copySet;
-    }
-
-    public DoublyLinkedCircularBoundedQueue<T> getValues() {
-        DoublyLinkedCircularBoundedQueue<T> res = new DoublyLinkedCircularBoundedQueue<>(size);
-
-        for(int i = 0; i < capacity; i++) {
-            if (hashTable[i] != null)
-                res.offer(hashTable[i]);
-        }
-
-        return res;
-    }
-
-    private int getIndex(T item) {
+    public int get(T item) {
         int index;
 
-        for (int i = 0; i < capacity; i++) {
+        for(int i = 0; i < capacity - 1; i++) {
             index = (hash1(item) + i * hash2(item)) % capacity;
 
-            if (hashTable[index] != null) {
-                if (hashTable[index].equals(item))
-                    return index;
-            }
+            if (hashTable[index] == null) return -1;
 
-            if (hashTable[index] == null) return index;
+            if (hashTable[index].equals(item)) return index;
         }
 
         return -1;
     }
 
+    public void print() {
+        for (int i = 0; i < capacity; i++) {
+            if (hashTable[i] != null && !hashTable[i].equals(DEFUNCT))
+                System.out.print(hashTable[i] + " ");
+        }
+    }
+
+    public DoubleHashSet<T> copy() {
+        DoubleHashSet<T> copySet = new DoubleHashSet<>(capacity);
+
+        copySet.hashTable = Arrays.copyOf(hashTable, hashTable.length);
+        copySet.capacity = capacity;
+        copySet.size = size;
+
+        return copySet;
+    }
+
     private int hash1(T val) {
-        int index = Math.abs(val.hashCode());
-        return index % capacity;
+        int hashVal = Math.abs(val.hashCode());
+
+        return hashVal % capacity;
     }
 
     private int hash2(T val) {
-        int index = Math.abs(val.hashCode());
-        return PRIME - index % PRIME;
+        int hashVal = Math.abs(val.hashCode());
+
+        return PRIME - hashVal % PRIME;
     }
 
-    private int getClosestPrime(int number) {
-        int prime = number - 1;
-        while (!isPrime(prime)) prime--;
+    public int getClosestPrime() {
+        for (int i = capacity - 1; i >= 1; i--) {
+            int count = 0;
 
-        return prime;
-    }
+            for (int j = 2; j * j <= i; j++)
 
-    private boolean isPrime(int number) {
-        if (number == 1)
-            return false;
+                if (i % j == 0){
+                    count++;
+                }
 
-        if (number <= 3)
-            return true;
-
-        for (int i = 2; i < Math.sqrt(number); i++) {
-            if (number % i == 0) return false;
+            if (count == 0) {
+                return i;
+            }
         }
-
-        return false;
+        return 3;
     }
 }
 
