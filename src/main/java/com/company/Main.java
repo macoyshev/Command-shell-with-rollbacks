@@ -40,17 +40,12 @@ class CommandShellWithRollbacks {
                         break;
                     case "UNDO":
                         int countBackUps = 1;
-                        if (data.length == 2) {
-                            countBackUps = Integer.parseInt(data[1]);
+                        if (data.length == 2) countBackUps = Integer.parseInt(data[1]);
 
-                            if (countBackUps >= FileSystem.getCurrentDepth())
-                                throw new RuntimeException("UNDO "+ countBackUps);
-                        } else {
-                            if (countBackUps >= FileSystem.getCurrentDepth())
+                        if (countBackUps> FileSystem.countOfBackups())
+                            if (countBackUps == 1)
                                 throw new RuntimeException("UNDO");
-                        }
-
-
+                            else throw new RuntimeException("UNDO " + countBackUps);
 
                         for(int j = 0; j < countBackUps; j++) {
                             FileSystem.makeBackUp();
@@ -144,27 +139,28 @@ class BoundedCommandsQueue {
 class FileSystem {
     private static DoubleHashSet<String> storage = new DoubleHashSet<>(1);
 
-    private static QueuedBoundedStack<BackUp> stages = new QueuedBoundedStack<>( 1);
+
+    private static QueuedBoundedStack<BackUp> backUps = new QueuedBoundedStack<>( 1);
 
     public static void init(int maxFilesDirsCount) {
         storage = new DoubleHashSet<>(maxFilesDirsCount);
-        stages = new QueuedBoundedStack<>(100);
+        backUps = new QueuedBoundedStack<>(100);
     }
 
     public static void init(int maxFilesDirsCount, int maxBackUpDepth) {
-        storage = new DoubleHashSet<>(maxFilesDirsCount);
-        stages = new QueuedBoundedStack<>(maxBackUpDepth);
+        storage = new DoubleHashSet<>(10000);
+        backUps = new QueuedBoundedStack<>(maxBackUpDepth - 1);
     }
 
     public static void create(String name) throws CreationException {
+
+
         try {
             storeStage();
 
             storage.add(name);
-
         } catch (RuntimeException e) {
-            stages.pop();
-
+            backUps.pop();
             throw new CreationException("NEW " + name);
         }
     }
@@ -174,15 +170,15 @@ class FileSystem {
             storeStage();
 
             storage.remove(name);
-
         } catch (RuntimeException e) {
-            stages.pop();
+            backUps.pop();
+
             throw new RemoveException("REMOVE " + name);
         }
     }
 
     public static void makeBackUp() {
-        BackUp previousStage = stages.pop();
+        BackUp previousStage = backUps.pop();
 
         storage = previousStage.getStorage();
     }
@@ -192,14 +188,14 @@ class FileSystem {
         System.out.println();
     }
 
-    public static int getCurrentDepth() {
-        return stages.size();
+    public static int countOfBackups() {
+        return backUps.size();
     }
 
     private static void storeStage() {
         BackUp currentStage = new BackUp();
 
-        stages.push(currentStage);
+        backUps.push(currentStage);
     }
 
     static private class BackUp {
@@ -212,6 +208,7 @@ class FileSystem {
         public DoubleHashSet<String> getStorage() {
             return storage;
         }
+
     }
 
     static class CreationException extends RuntimeException {
